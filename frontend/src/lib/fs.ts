@@ -99,8 +99,13 @@ export async function uniqueName(dir: string, name: string): Promise<string> {
   return candidate;
 }
 
+export function sanitizeName(value: string, fallback = "untitled"): string {
+  const cleaned = value.replace(/[\\/:*?"<>|]/g, "-").replace(/\s+/g, " ").trim().replace(/^\.+/, "");
+  return cleaned || fallback;
+}
+
 export async function createFolder(parent: string, name: string) {
-  const safe = await uniqueName(parent, name);
+  const safe = await uniqueName(parent, sanitizeName(name, "New folder"));
   await FileSystem.makeDirectoryAsync(joinDir(parent, safe), { intermediates: true });
   return joinDir(parent, safe);
 }
@@ -169,20 +174,31 @@ export async function deleteForever(uri: string) {
 }
 
 export async function readText(uri: string) {
+  const info = await FileSystem.getInfoAsync(uri);
+  if (!info.exists || info.isDirectory) throw new Error("File is missing or unavailable");
   return FileSystem.readAsStringAsync(uri);
 }
 
 export async function writeText(uri: string, content: string) {
+  await ensure(parentOf(uri));
   await FileSystem.writeAsStringAsync(uri, content);
+  const info = await FileSystem.getInfoAsync(uri);
+  if (!info.exists) throw new Error("Text file was not saved");
 }
 
 export async function writeBase64(uri: string, b64: string) {
+  if (!b64) throw new Error("Cannot save an empty file");
+  await ensure(parentOf(uri));
   await FileSystem.writeAsStringAsync(uri, b64, {
     encoding: FileSystem.EncodingType.Base64,
   });
+  const info = await FileSystem.getInfoAsync(uri);
+  if (!info.exists || Number((info as any).size ?? 0) <= 0) throw new Error("File was not saved");
 }
 
 export async function readBase64(uri: string) {
+  const info = await FileSystem.getInfoAsync(uri);
+  if (!info.exists || info.isDirectory) throw new Error("File is missing or unavailable");
   return FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
 }
 

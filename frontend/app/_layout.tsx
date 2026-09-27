@@ -10,7 +10,6 @@ import { ErrorBoundary } from "@/src/components/error-boundary";
 import { DialogProvider } from "@/src/components/dialog";
 import { ToastProvider } from "@/src/components/toast";
 import { ensureDirs } from "@/src/lib/fs";
-import { initializeLocalNotifications } from "@/src/lib/notifications";
 import { applyThemePref, loadThemePref } from "@/src/lib/theme-pref";
 import { queryClient } from "@/src/query-client";
 import { useTheme } from "@/src/theme";
@@ -24,7 +23,6 @@ export default function RootLayout() {
   useEffect(() => {
     void ensureDirs().catch((error) => console.warn("[startup] storage initialization failed", error));
     void loadThemePref().then(applyThemePref).catch((error) => console.warn("[startup] theme initialization failed", error));
-    void initializeLocalNotifications();
   }, []);
 
   return (

@@ -4,7 +4,7 @@
     "slug": "file-mind",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/file-mind-icon.png",
     "scheme": "filemind",
     "userInterfaceStyle": "automatic",
     "ios": {
@@ -14,13 +14,12 @@
         "NSCameraUsageDescription": "Scan documents with your camera",
         "NSPhotoLibraryUsageDescription": "Import photos to convert and organize",
         "NSPhotoLibraryAddUsageDescription": "Save scanned documents to your library",
-        "NSFaceIDUsageDescription": "Unlock your private Vault",
-        "NSUserNotificationsUsageDescription": "Receive helpful on-device reminders"
+        "NSFaceIDUsageDescription": "Unlock your private Vault"
       }
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "foregroundImage": "./assets/images/file-mind-adaptive.png",
         "backgroundColor": "#FF5E00"
       },
       "package": "com.filemind.app",
@@ -28,21 +27,20 @@
         "android.permission.CAMERA",
         "android.permission.USE_BIOMETRIC",
         "android.permission.READ_MEDIA_IMAGES",
-        "android.permission.READ_MEDIA_VIDEO",
-        "android.permission.POST_NOTIFICATIONS"
+        "android.permission.READ_MEDIA_VIDEO"
       ]
     },
     "web": {
       "bundler": "metro",
       "output": "single",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/images/file-mind-favicon.png"
     },
     "plugins": [
       "expo-router",
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-image.png",
+          "image": "./assets/images/file-mind-splash.png",
           "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#FF5E00"
@@ -55,7 +53,6 @@
       "expo-status-bar",
       "expo-sqlite",
       "expo-sharing",
-      "expo-notifications",
       "@react-native-vector-icons/material-design-icons",
       [
         "expo-camera",

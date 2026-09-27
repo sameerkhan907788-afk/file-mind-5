@@ -1,9 +1,9 @@
 import { useRouter } from "expo-router";
-import * as Sharing from "expo-sharing";
 import { useCallback } from "react";
 
 import { useToast } from "@/src/components/toast";
 import { addRecent } from "@/src/lib/db";
+import { shareFile } from "@/src/lib/file-actions";
 import { getKind } from "@/src/lib/format";
 
 export function useFileOpener() {
@@ -24,10 +24,10 @@ export function useFileOpener() {
         return;
       }
       // Unsupported preview → hand off to Android "Open with" / share sheet.
-      if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(uri).catch(() => {});
-      } else {
-        toast.show("No app available to open this file", "info");
+      try {
+        await shareFile(uri, name);
+      } catch (error: any) {
+        toast.show(error?.message || "No compatible app is available to open this file", "error");
       }
     },
     [router, toast],

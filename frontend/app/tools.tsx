@@ -10,8 +10,9 @@ import { ScreenHeader } from "@/src/components/screen-header";
 import { useToast } from "@/src/components/toast";
 import { ProgressOverlay, haptic } from "@/src/components/ui";
 import { Icon, type IconName } from "@/src/icons";
-import { ROOT } from "@/src/lib/fs";
-import { imagesToPdf } from "@/src/lib/pdf";
+import { useImport } from "@/src/hooks/use-import";
+import { ROOT, createFolder, importInto, joinDir, sanitizeName, uniqueName, writeText } from "@/src/lib/fs";
+import { createTextPdf, imagesToPdf } from "@/src/lib/pdf";
 import { makeStyles, radius, spacing, useTheme } from "@/src/theme";
 
 type Item = { id: string; label: string; icon: IconName; tint: string };
@@ -23,7 +24,7 @@ const GROUPS: Group[] = [
     items: [
       { id: "import", label: "Import files", icon: "import", tint: "#FF5E00" },
       { id: "newfolder", label: "New folder", icon: "folder-plus", tint: "#2563EB" },
-      { id: "zip", label: "Compress ZIP", icon: "folder-zip", tint: "#A16207" },
+      { id: "newtext", label: "Create text file", icon: "file-document-plus-outline", tint: "#64748B" },
       { id: "trash", label: "Trash", icon: "trash-can-outline", tint: "#8E8E93" },
     ],
   },
@@ -31,6 +32,7 @@ const GROUPS: Group[] = [
     title: "PDF Tools",
     items: [
       { id: "merge", label: "Merge PDFs", icon: "vector-combine", tint: "#FF5E00" },
+      { id: "createpdf", label: "Create PDF", icon: "file-pdf-box", tint: "#E4483C" },
       { id: "split", label: "Split PDF", icon: "call-split", tint: "#E4483C" },
       { id: "pdfcompress", label: "Compress PDF", icon: "zip-box", tint: "#8B5CF6" },
       { id: "watermark", label: "Watermark", icon: "watermark", tint: "#2563EB" },
@@ -78,8 +80,62 @@ export default function Tools() {
   const dialog = useDialog();
   const toast = useToast();
   const params = useLocalSearchParams<{ open?: string }>();
+  const importFiles = useImport();
   const [busy, setBusy] = React.useState<string | null>(null);
   const handledParam = useRef(false);
+
+  const createTextFlow = useCallback(async () => {
+    const requestedName = await dialog.prompt({ title: "Create text file", placeholder: "notes.txt", defaultValue: "notes.txt", confirmText: "Next" });
+    if (!requestedName) return;
+    const content = await dialog.prompt({ title: "Text content", placeholder: "Write your notes", confirmText: "Save" });
+    if (content === null) return;
+    setBusy("Saving text file…");
+    try {
+      const name = sanitizeName(requestedName, "notes").toLowerCase().endsWith(".txt") ? sanitizeName(requestedName, "notes") : `${sanitizeName(requestedName, "notes")}.txt`;
+      const target = joinDir(ROOT, await uniqueName(ROOT, name));
+      await writeText(target, content);
+      await qc.invalidateQueries({ queryKey: ["files"] });
+      await qc.invalidateQueries({ queryKey: ["home"] });
+      toast.show("Text file created", "success");
+    } catch (error: any) {
+      toast.show(error?.message || "Could not create text file", "error");
+    } finally {
+      setBusy(null);
+    }
+  }, [dialog, qc, toast]);
+
+  const createPdfTextFlow = useCallback(async () => {
+    const requestedName = await dialog.prompt({ title: "Create PDF", placeholder: "document", defaultValue: "document", confirmText: "Next" });
+    if (!requestedName) return;
+    const content = await dialog.prompt({ title: "PDF content", placeholder: "Write the document text", confirmText: "Create" });
+    if (content === null) return;
+    setBusy("Creating PDF…");
+    try {
+      const result = await createTextPdf(content, ROOT, sanitizeName(requestedName, "document"));
+      await qc.invalidateQueries({ queryKey: ["files"] });
+      await qc.invalidateQueries({ queryKey: ["pdf"] });
+      await qc.invalidateQueries({ queryKey: ["home"] });
+      toast.show("PDF created", "success");
+      router.push({ pathname: "/pdf-viewer", params: { uri: result.uri, name: result.uri.split("/").pop() || "document.pdf" } });
+    } catch (error: any) {
+      toast.show(error?.message || "Could not create PDF", "error");
+    } finally {
+      setBusy(null);
+    }
+  }, [dialog, qc, router, toast]);
+
+  const newFolderFlow = useCallback(async () => {
+    const name = await dialog.prompt({ title: "New folder", placeholder: "Folder name", confirmText: "Create" });
+    if (!name) return;
+    try {
+      await createFolder(ROOT, name);
+      await qc.invalidateQueries({ queryKey: ["files"] });
+      await qc.invalidateQueries({ queryKey: ["home"] });
+      toast.show("Folder created", "success");
+    } catch (error: any) {
+      toast.show(error?.message || "Could not create folder", "error");
+    }
+  }, [dialog, qc, toast]);
 
   const imagesToPdfFlow = useCallback(async () => {
     const res = await DocumentPicker.getDocumentAsync({ type: "image/*", multiple: true, copyToCacheDirectory: true });
@@ -101,6 +157,21 @@ export default function Tools() {
     }
   }, [dialog, qc, router, toast]);
 
+  const pdfToTextFlow = useCallback(async () => {
+    const res = await DocumentPicker.getDocumentAsync({ type: "application/pdf", copyToCacheDirectory: true });
+    if (res.canceled || !res.assets?.length) return;
+    const asset = res.assets[0];
+    setBusy("Preparing PDF…");
+    try {
+      const stored = await importInto(ROOT, asset.uri, asset.name || "document.pdf");
+      router.push({ pathname: "/pdf-viewer", params: { uri: stored, name: stored.split("/").pop() || "document.pdf", autoExtract: "1" } });
+    } catch (error: any) {
+      toast.show(error?.message || "Could not prepare PDF", "error");
+    } finally {
+      setBusy(null);
+    }
+  }, [router, toast]);
+
   const ocrFlow = useCallback(async () => {
     const res = await DocumentPicker.getDocumentAsync({ type: "image/*", copyToCacheDirectory: true });
     if (res.canceled || !res.assets?.length) return;
@@ -119,7 +190,14 @@ export default function Tools() {
     haptic();
     switch (id) {
       case "import":
+        void importFiles(ROOT);
+        break;
       case "newfolder":
+        void newFolderFlow();
+        break;
+      case "newtext":
+        void createTextFlow();
+        break;
       case "zip":
       case "zip2":
         router.push("/(tabs)/files");
@@ -127,11 +205,13 @@ export default function Tools() {
       case "trash":
         router.push("/trash");
         break;
+      case "pdftext":
+        void pdfToTextFlow();
+        break;
       case "merge":
       case "split":
       case "pdfcompress":
       case "watermark":
-      case "pdftext":
         router.push("/(tabs)/pdf");
         break;
       case "scan":

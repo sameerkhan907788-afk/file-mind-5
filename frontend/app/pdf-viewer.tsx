@@ -1,7 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import * as Sharing from "expo-sharing";
-import React, { useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Platform, Pressable, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { WebView } from "react-native-webview";
@@ -9,6 +8,7 @@ import { WebView } from "react-native-webview";
 import { useDialog } from "@/src/components/dialog";
 import { useToast } from "@/src/components/toast";
 import { Icon } from "@/src/icons";
+import { shareFile, saveCopy } from "@/src/lib/file-actions";
 import { haptic } from "@/src/components/ui";
 import { createTextPdf } from "@/src/lib/pdf";
 import { baseName } from "@/src/lib/format";
@@ -23,7 +23,7 @@ export default function PdfViewer() {
   const router = useRouter();
   const dialog = useDialog();
   const toast = useToast();
-  const { uri, name } = useLocalSearchParams<{ uri: string; name: string }>();
+  const { uri, name, autoExtract } = useLocalSearchParams<{ uri: string; name: string; autoExtract?: string }>();
   const webRef = useRef<WebView>(null);
 
   const [pages, setPages] = useState(0);
@@ -71,31 +71,72 @@ export default function PdfViewer() {
     }
   };
 
-  const extractText = async () => {
-    if (!docText.trim()) return toast.show("No selectable text in this PDF", "info");
-    const v = await dialog.actions({
-      title: "Extract text",
-      options: [
-        { label: "Save as .txt", icon: "file-document-outline", value: "txt" },
-        { label: "Save as text PDF", icon: "file-pdf-box", value: "pdf" },
-        { label: "Share text", icon: "share-variant", value: "share" },
-      ],
-    });
-    const dir = parentOf(uri);
-    const base = baseName(name || "document");
-    if (v === "txt") {
-      const fn = await uniqueName(dir, `${base}.txt`);
-      await writeText(joinDir(dir, fn), docText);
-      toast.show("Saved as text file", "success");
-    } else if (v === "pdf") {
-      await createTextPdf(docText, dir, `${base}_text`);
-      toast.show("Saved as text PDF", "success");
-    } else if (v === "share") {
-      const tmp = (await import("@/src/lib/fs")).TMP + `${base}.txt`;
-      await writeText(tmp, docText);
-      if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(tmp);
+  const share = async () => {
+    try {
+      await shareFile(uri, name);
+      toast.show("Share sheet opened", "success");
+    } catch (error: any) {
+      toast.show(error?.message || "Could not share this PDF", "error");
     }
   };
+
+  const save = async () => {
+    try {
+      await saveCopy(uri, name);
+      toast.show("PDF saved successfully", "success");
+    } catch (error: any) {
+      toast.show(error?.message || "Could not save this PDF", "error");
+    }
+  };
+
+  const extractText = async () => {
+    if (!docText.trim()) return toast.show("No selectable text in this PDF", "info");
+    try {
+      const v = await dialog.actions({
+        title: "Extract text",
+        options: [
+          { label: "Save as .txt", icon: "file-document-outline", value: "txt" },
+          { label: "Save as text PDF", icon: "file-pdf-box", value: "pdf" },
+          { label: "Share text", icon: "share-variant", value: "share" },
+        ],
+      });
+      if (!v) return;
+      const dir = parentOf(uri);
+      const base = baseName(name || "document");
+      if (v === "txt") {
+        const fn = await uniqueName(dir, `${base}.txt`);
+        await writeText(joinDir(dir, fn), docText);
+        toast.show("Saved as text file", "success");
+      } else if (v === "pdf") {
+        await createTextPdf(docText, dir, `${base}_text`);
+        toast.show("Saved as text PDF", "success");
+      } else if (v === "share") {
+        const tmp = (await import("@/src/lib/fs")).TMP + `${base}.txt`;
+        await writeText(tmp, docText);
+        await shareFile(tmp, `${base}.txt`);
+        toast.show("Share sheet opened", "success");
+      }
+    } catch (error: any) {
+      toast.show(error?.message || "Could not extract text", "error");
+    }
+  };
+
+  const autoExtracted = useRef(false);
+
+  useEffect(() => {
+    if (autoExtract !== "1" || !docText.trim() || autoExtracted.current) return;
+    autoExtracted.current = true;
+    (async () => {
+      try {
+        const dir = parentOf(uri);
+        const fn = await uniqueName(dir, `${baseName(name || "document")}.txt`);
+        await writeText(joinDir(dir, fn), docText);
+        toast.show("PDF text saved", "success");
+      } catch (error: any) {
+        toast.show(error?.message || "Could not save PDF text", "error");
+      }
+    })();
+  }, [autoExtract, docText, name, toast, uri]);
 
   return (
     <View style={styles.screen}>
@@ -115,14 +156,10 @@ export default function PdfViewer() {
         <Pressable testID="viewer-extract" onPress={extractText} hitSlop={8} style={styles.hBtn}>
           <Icon name="text-recognition" size={23} color={colors.onSurface} />
         </Pressable>
-        <Pressable
-          testID="viewer-share"
-          onPress={async () => {
-            if (await Sharing.isAvailableAsync()) Sharing.shareAsync(uri);
-          }}
-          hitSlop={8}
-          style={styles.hBtn}
-        >
+        <Pressable testID="viewer-save" onPress={save} hitSlop={8} style={styles.hBtn}>
+          <Icon name="download" size={22} color={colors.onSurface} />
+        </Pressable>
+        <Pressable testID="viewer-share" onPress={share} hitSlop={8} style={styles.hBtn}>
           <Icon name="share-variant" size={22} color={colors.onSurface} />
         </Pressable>
       </View>

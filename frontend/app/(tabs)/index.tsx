@@ -76,7 +76,7 @@ export default function Home() {
           <BrandMark size={42} />
           <View>
             <Text style={styles.brandName}>File Mind</Text>
-            <Text style={styles.brandSub}>Everything, in one place</Text>
+            <Text style={styles.brandSub}>Private document tools, all in one place</Text>
           </View>
         </View>
         <Pressable testID="home-settings" onPress={() => router.push("/settings")} hitSlop={8} style={styles.topIcon}>
@@ -100,7 +100,9 @@ export default function Home() {
           <Text style={styles.searchText}>Search files or ask AI…</Text>
         </Pressable>
 
-        <View style={styles.quickRow}>
+        <View>
+          <SectionHeader title="Quick Tools" />
+          <View style={styles.quickRow}>
           {QUICK.map((q) => (
             <Pressable
               key={q.label}
@@ -117,6 +119,7 @@ export default function Home() {
               <Text style={styles.quickLabel}>{q.label}</Text>
             </Pressable>
           ))}
+          </View>
         </View>
 
         <Pressable testID="home-storage" onPress={() => router.push("/storage")}>

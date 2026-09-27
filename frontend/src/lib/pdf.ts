@@ -1,4 +1,5 @@
 import { readBase64, writeBase64, uniqueName, joinDir, getInfo } from "./fs";
+import { verifyOutput } from "./file-actions";
 import { baseName } from "./format";
 
 // pdf-lib is loaded lazily so its module (and the crypto polyfill) never
@@ -24,8 +25,7 @@ async function loadDoc(uri: string) {
 async function saveDoc(doc: import("pdf-lib").PDFDocument, destUri: string) {
   const b64 = await doc.saveAsBase64({ useObjectStreams: true });
   await writeBase64(destUri, b64);
-  const info = await getInfo(destUri);
-  return { uri: destUri, size: (info as any).size ?? 0 };
+  return verifyOutput(destUri, "JVBERi0");
 }
 
 export async function getPageCount(uri: string): Promise<number> {
@@ -34,6 +34,7 @@ export async function getPageCount(uri: string): Promise<number> {
 }
 
 export async function imagesToPdf(imageUris: string[], destDir: string, fileName: string) {
+  if (!imageUris.length) throw new Error("Select at least one image");
   const { PDFDocument } = await lib();
   const doc = await PDFDocument.create();
   for (const uri of imageUris) {

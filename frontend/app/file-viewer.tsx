@@ -2,12 +2,13 @@ import { Image } from "expo-image";
 import { useAudioPlayer, useAudioPlayerStatus } from "expo-audio";
 import { useLocalSearchParams } from "expo-router";
 import { useVideoPlayer, VideoView } from "expo-video";
-import * as Sharing from "expo-sharing";
 import React, { useEffect, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
 
 import { ScreenHeader } from "@/src/components/screen-header";
+import { useToast } from "@/src/components/toast";
 import { Icon } from "@/src/icons";
+import { shareFile, saveCopy } from "@/src/lib/file-actions";
 import { formatBytes, getExt } from "@/src/lib/format";
 import { getInfo, readText } from "@/src/lib/fs";
 import { makeStyles, radius, spacing, useTheme } from "@/src/theme";
@@ -15,25 +16,60 @@ import { makeStyles, radius, spacing, useTheme } from "@/src/theme";
 export default function FileViewer() {
   const { uri, name, kind } = useLocalSearchParams<{ uri: string; name: string; kind: string }>();
   const styles = useStyles();
+  const { colors } = useTheme();
+  const toast = useToast();
+  const [state, setState] = useState<"checking" | "ready" | "error">("checking");
+  const [attempt, setAttempt] = useState(0);
 
-  const shareAction = {
-    icon: "share-variant" as const,
-    testID: "fileviewer-share",
-    onPress: async () => {
-      if (await Sharing.isAvailableAsync()) Sharing.shareAsync(uri);
-    },
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const info = await getInfo(uri);
+        if (!info.exists || info.isDirectory || Number((info as any).size ?? 0) <= 0) throw new Error("File is missing or empty");
+        if (active) setState("ready");
+      } catch {
+        if (active) setState("error");
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [uri, attempt]);
+
+  const runShare = async () => {
+    try {
+      await shareFile(uri, name);
+      toast.show("Share sheet opened", "success");
+    } catch (error: any) {
+      toast.show(error?.message || "Could not share this file", "error");
+    }
+  };
+
+  const runSave = async () => {
+    try {
+      await saveCopy(uri, name);
+      toast.show("File saved successfully", "success");
+    } catch (error: any) {
+      toast.show(error?.message || "Could not save a copy", "error");
+    }
   };
 
   return (
     <View style={styles.screen}>
-      <ScreenHeader title={name} actions={[shareAction]} />
-      {kind === "image" ? (
-        <ScrollView
-          maximumZoomScale={4}
-          minimumZoomScale={1}
-          contentContainerStyle={styles.imageWrap}
-          centerContent
-        >
+      <ScreenHeader
+        title={name}
+        actions={[
+          { icon: "download", testID: "fileviewer-save", onPress: runSave },
+          { icon: "share-variant", testID: "fileviewer-share", onPress: runShare },
+        ]}
+      />
+      {state === "checking" ? (
+        <View style={styles.center}><ActivityIndicator color={colors.brandPrimary} /></View>
+      ) : state === "error" ? (
+        <ViewerError name={name} onRetry={() => { setState("checking"); setAttempt((value) => value + 1); }} />
+      ) : kind === "image" ? (
+        <ScrollView maximumZoomScale={4} minimumZoomScale={1} contentContainerStyle={styles.imageWrap} centerContent>
           <Image source={{ uri }} style={styles.image} contentFit="contain" testID="viewer-image" />
         </ScrollView>
       ) : kind === "video" ? (
@@ -41,8 +77,23 @@ export default function FileViewer() {
       ) : kind === "audio" ? (
         <AudioPreview uri={uri} name={name} />
       ) : (
-        <TextPreview uri={uri} name={name} />
+        <TextPreview uri={uri} name={name} onShare={runShare} />
       )}
+    </View>
+  );
+}
+
+function ViewerError({ name, onRetry }: { name: string; onRetry: () => void }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
+  return (
+    <View style={styles.unsupported}>
+      <Icon name="file-alert-outline" size={44} color={colors.error} />
+      <Text style={styles.unsupportedTitle}>File unavailable</Text>
+      <Text style={styles.unsupportedText}>{name} is missing, empty, or cannot be read.</Text>
+      <Pressable testID="viewer-retry" style={styles.openWith} onPress={onRetry}>
+        <Text style={styles.openWithText}>Try again</Text>
+      </Pressable>
     </View>
   );
 }
@@ -91,7 +142,7 @@ function AudioPreview({ uri, name }: { uri: string; name: string }) {
   );
 }
 
-function TextPreview({ uri, name }: { uri: string; name: string }) {
+function TextPreview({ uri, name, onShare }: { uri: string; name: string; onShare: () => void }) {
   const styles = useStyles();
   const { colors } = useTheme();
   const [content, setContent] = useState<string | null>(null);
@@ -123,7 +174,7 @@ function TextPreview({ uri, name }: { uri: string; name: string }) {
         <Pressable
           testID="unsupported-openwith"
           style={styles.openWith}
-          onPress={async () => (await Sharing.isAvailableAsync()) && Sharing.shareAsync(uri)}
+          onPress={onShare}
         >
           <Text style={styles.openWithText}>Open with…</Text>
         </Pressable>

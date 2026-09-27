@@ -1,6 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
-import * as Sharing from "expo-sharing";
 import React, { useMemo, useState } from "react";
 import { ActivityIndicator, FlatList, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -13,6 +12,7 @@ import { FolderPicker } from "@/src/components/folder-picker";
 import { useToast } from "@/src/components/toast";
 import { Chip, Fab, IconButton, ProgressOverlay, haptic } from "@/src/components/ui";
 import { Icon } from "@/src/icons";
+import { shareFile } from "@/src/lib/file-actions";
 import { useFileOpener } from "@/src/hooks/use-file-opener";
 import { useImport } from "@/src/hooks/use-import";
 import {
@@ -199,22 +199,25 @@ export default function Files() {
   };
 
   const doShare = async () => {
-    if (!(await Sharing.isAvailableAsync())) return toast.show("Sharing not available", "info");
-    if (selectedEntries.length === 1 && !selectedEntries[0].isDir) {
-      await Sharing.shareAsync(selectedEntries[0].uri).catch(() => {});
-    } else {
-      setBusy("Preparing…");
-      try {
+    if (selectedEntries.length === 0) return;
+    setBusy("Preparing share…");
+    try {
+      if (selectedEntries.length === 1 && !selectedEntries[0].isDir) {
+        await shareFile(selectedEntries[0].uri, selectedEntries[0].name);
+      } else {
         const files = selectedEntries.filter((e) => !e.isDir).map((e) => ({ uri: e.uri, name: e.name }));
+        if (!files.length) throw new Error("Select at least one file to share");
         const { TMP } = await import("@/src/lib/fs");
         const zipUri = await createZip(files, TMP, `share-${Date.now()}.zip`);
-        setBusy(null);
-        await Sharing.shareAsync(zipUri).catch(() => {});
-      } finally {
-        setBusy(null);
+        await shareFile(zipUri, "File Mind share.zip");
       }
+      toast.show("Share sheet opened", "success");
+    } catch (error: any) {
+      toast.show(error?.message || "Could not share selected files", "error");
+    } finally {
+      setBusy(null);
+      clearSel();
     }
-    clearSel();
   };
 
   const doFavorite = async () => {

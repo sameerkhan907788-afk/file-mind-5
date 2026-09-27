@@ -25,7 +25,7 @@ export default function Terms() {
         <Text style={styles.h}>4. Document operations</Text>
         <Text style={styles.p}>Conversions, OCR, edits, merges, compression, and other operations can be affected by file format, device storage, and platform limitations. Verify important output and preserve originals before destructive actions.</Text>
         <Text style={styles.h}>5. Device features</Text>
-        <Text style={styles.p}>Camera, biometrics, media access, audio, video, PDF rendering, OCR, and notifications depend on your device and operating system. You control permission decisions and notification settings.</Text>
+        <Text style={styles.p}>Camera, biometrics, media access, audio, video, PDF rendering, and OCR depend on your device and operating system. You control permission decisions and system settings.</Text>
         <Text style={styles.h}>6. No warranty</Text>
         <Text style={styles.p}>File Mind is provided “as is” without warranties of any kind. We do not guarantee uninterrupted operation or recovery of local data.</Text>
         <Text style={styles.h}>7. Limitation of liability</Text>
