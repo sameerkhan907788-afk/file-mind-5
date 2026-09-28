@@ -29,9 +29,10 @@ export function useImport() {
             failed.push(name);
           }
         }
-        qc.invalidateQueries({ queryKey: ["files"] });
-        qc.invalidateQueries({ queryKey: ["home"] });
-        if (!created.length) toast.show("No files could be imported", "error");
+        await qc.invalidateQueries({ queryKey: ["files"] });
+        await qc.invalidateQueries({ queryKey: ["home"] });
+        await qc.invalidateQueries({ queryKey: ["storage"] });
+        if (!created.length) toast.show(failed.length ? `Could not import ${failed.length} file${failed.length === 1 ? "" : "s"}` : "No files were selected", failed.length ? "error" : "info");
         else if (failed.length) toast.show(`Imported ${created.length}; skipped ${failed.length}`, "info");
         else toast.show(`Imported ${created.length} file${created.length === 1 ? "" : "s"}`, "success");
         return created;

@@ -1,4 +1,3 @@
-import { useRouter } from "expo-router";
 import React from "react";
 import { Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -6,6 +5,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Icon, type IconName } from "@/src/icons";
 import { makeStyles, spacing, useTheme } from "@/src/theme";
 import { haptic } from "@/src/components/ui";
+import { useSafeBack } from "@/src/hooks/use-safe-back";
 
 export type HeaderAction = { icon: IconName; onPress: () => void; testID?: string; tint?: string };
 
@@ -25,17 +25,25 @@ export function ScreenHeader({
   const styles = useStyles();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
-  const router = useRouter();
+  const safeBack = useSafeBack();
+
+  const handleBack = () => {
+    haptic();
+    try {
+      if (onBack) onBack();
+      else safeBack();
+    } catch (error) {
+      console.warn("[navigation] header back failed", error);
+      safeBack();
+    }
+  };
 
   return (
     <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
       {showBack && (
         <Pressable
           testID="header-back"
-          onPress={() => {
-            haptic();
-            onBack ? onBack() : router.back();
-          }}
+          onPress={handleBack}
           hitSlop={10}
           style={styles.backBtn}
         >

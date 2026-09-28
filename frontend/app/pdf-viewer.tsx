@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams } from "expo-router";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Platform, Pressable, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -7,12 +7,13 @@ import { WebView } from "react-native-webview";
 
 import { useDialog } from "@/src/components/dialog";
 import { useToast } from "@/src/components/toast";
+import { useSafeBack } from "@/src/hooks/use-safe-back";
 import { Icon } from "@/src/icons";
 import { shareFile, saveCopy } from "@/src/lib/file-actions";
 import { haptic } from "@/src/components/ui";
 import { createTextPdf } from "@/src/lib/pdf";
 import { baseName } from "@/src/lib/format";
-import { parentOf, writeText, joinDir, uniqueName } from "@/src/lib/fs";
+import { parentOf, readBase64, writeText, joinDir, uniqueName } from "@/src/lib/fs";
 import { ensurePdfJs, viewerUri } from "@/src/lib/pdfjs";
 import { makeStyles, radius, spacing, useTheme } from "@/src/theme";
 
@@ -20,7 +21,7 @@ export default function PdfViewer() {
   const styles = useStyles();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
-  const router = useRouter();
+  const safeBack = useSafeBack();
   const dialog = useDialog();
   const toast = useToast();
   const { uri, name, autoExtract } = useLocalSearchParams<{ uri: string; name: string; autoExtract?: string }>();
@@ -37,9 +38,20 @@ export default function PdfViewer() {
   const ready = useQuery({
     queryKey: ["pdfjs-ready"],
     queryFn: ensurePdfJs,
+    enabled: Platform.OS !== "web",
+    retry: 1,
+  });
+  const pdfData = useQuery({
+    queryKey: ["pdf-data", uri],
+    queryFn: () => readBase64(uri),
+    enabled: Platform.OS !== "web" && !!uri,
+    retry: 1,
   });
 
-  const injected = useMemo(() => `window.__PDF_URL__=${JSON.stringify(uri)};true;`, [uri]);
+  const injected = useMemo(
+    () => (pdfData.data ? `window.__PDF_BASE64__=${JSON.stringify(pdfData.data)};true;` : "true;"),
+    [pdfData.data],
+  );
 
   const post = (obj: any) => webRef.current?.postMessage(JSON.stringify(obj));
 
@@ -138,10 +150,12 @@ export default function PdfViewer() {
     })();
   }, [autoExtract, docText, name, toast, uri]);
 
+  const loadError = error || (ready.error as Error | null)?.message || (pdfData.error as Error | null)?.message || "Could not load this PDF";
+
   return (
     <View style={styles.screen}>
       <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
-        <Pressable testID="viewer-back" onPress={() => router.back()} hitSlop={10} style={styles.hBtn}>
+        <Pressable testID="viewer-back" onPress={safeBack} hitSlop={10} style={styles.hBtn}>
           <Icon name="chevron-left" size={28} color={colors.onSurface} />
         </Pressable>
         <View style={{ flex: 1 }}>
@@ -187,10 +201,26 @@ export default function PdfViewer() {
             <Icon name="cellphone" size={40} color={colors.muted} />
             <Text style={styles.centerText}>Open the app on your device to view PDFs.</Text>
           </View>
-        ) : ready.isLoading || !ready.data ? (
+        ) : ready.isError || pdfData.isError || error ? (
+          <View style={styles.center}>
+            <Icon name="alert-circle-outline" size={40} color={colors.error} />
+            <Text style={styles.centerText}>{loadError}</Text>
+            <Pressable
+              testID="viewer-retry"
+              style={styles.retryBtn}
+              onPress={() => {
+                setError(null);
+                void ready.refetch();
+                void pdfData.refetch();
+              }}
+            >
+              <Text style={styles.retryText}>Retry</Text>
+            </Pressable>
+          </View>
+        ) : ready.isLoading || pdfData.isLoading || !ready.data || !pdfData.data ? (
           <View style={styles.center}>
             <ActivityIndicator color={colors.brandPrimary} />
-            <Text style={styles.centerText}>Preparing PDF engine…</Text>
+            <Text style={styles.centerText}>Preparing PDF…</Text>
           </View>
         ) : !ready.data.ready ? (
           <View style={styles.center}>
@@ -198,11 +228,6 @@ export default function PdfViewer() {
             <Text style={styles.centerText}>
               First-time setup needs internet once to prepare the offline PDF engine. Connect and reopen.
             </Text>
-          </View>
-        ) : error ? (
-          <View style={styles.center}>
-            <Icon name="alert-circle-outline" size={40} color={colors.error} />
-            <Text style={styles.centerText}>{error}</Text>
           </View>
         ) : (
           <WebView
@@ -265,6 +290,8 @@ const useStyles = makeStyles((c) => ({
   body: { flex: 1 },
   center: { flex: 1, alignItems: "center", justifyContent: "center", padding: spacing.xxl, gap: spacing.md },
   centerText: { fontSize: 14.5, color: c.muted, textAlign: "center", lineHeight: 21 },
+  retryBtn: { marginTop: spacing.md, backgroundColor: c.brandPrimary, borderRadius: radius.pill, paddingHorizontal: spacing.xl, paddingVertical: spacing.md },
+  retryText: { color: c.onBrandPrimary, fontSize: 14, fontWeight: "700" },
   zoomBar: {
     position: "absolute",
     alignSelf: "center",

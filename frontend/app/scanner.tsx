@@ -10,6 +10,7 @@ import { useToast } from "@/src/components/toast";
 import { Icon } from "@/src/icons";
 import { ProgressOverlay, haptic } from "@/src/components/ui";
 import { useQueryClient } from "@tanstack/react-query";
+import { useSafeBack } from "@/src/hooks/use-safe-back";
 import { createFolder, listDir, ROOT } from "@/src/lib/fs";
 import { imagesToPdf } from "@/src/lib/pdf";
 import { makeStyles, radius, spacing, useTheme } from "@/src/theme";
@@ -19,6 +20,7 @@ export default function Scanner() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const safeBack = useSafeBack();
   const dialog = useDialog();
   const toast = useToast();
   const qc = useQueryClient();
@@ -36,9 +38,9 @@ export default function Scanner() {
     if (permission && !permission.granted && !askedPermission.current) {
       askedPermission.current = true;
       if (permission.canAskAgain) void requestPermission();
-      else router.back();
+      else safeBack();
     }
-  }, [permission, requestPermission, router]);
+  }, [permission, requestPermission, safeBack]);
 
   const capture = async () => {
     if (!cameraRef.current || capturing) return;
@@ -106,7 +108,7 @@ export default function Scanner() {
       <CameraView ref={cameraRef} style={styles.camera} facing={facing} flash={flash} />
 
       <View style={[styles.topControls, { top: insets.top + spacing.sm }]}>
-        <Pressable testID="scanner-close" style={styles.roundBtn} onPress={() => router.back()}>
+        <Pressable testID="scanner-close" style={styles.roundBtn} onPress={safeBack}>
           <Icon name="close" size={24} color="#FFFFFF" />
         </Pressable>
         <View style={styles.topRight}>

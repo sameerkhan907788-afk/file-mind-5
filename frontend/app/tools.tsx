@@ -11,7 +11,7 @@ import { useToast } from "@/src/components/toast";
 import { ProgressOverlay, haptic } from "@/src/components/ui";
 import { Icon, type IconName } from "@/src/icons";
 import { useImport } from "@/src/hooks/use-import";
-import { ROOT, createFolder, importInto, joinDir, sanitizeName, uniqueName, writeText } from "@/src/lib/fs";
+import { ROOT, createFolder, importInto, joinDir, sanitizeName, TMP, uniqueName, writeText } from "@/src/lib/fs";
 import { createTextPdf, imagesToPdf } from "@/src/lib/pdf";
 import { makeStyles, radius, spacing, useTheme } from "@/src/theme";
 
@@ -144,16 +144,20 @@ export default function Tools() {
     if (!name) return;
     setBusy("Creating PDF…");
     try {
-      const r = await imagesToPdf(res.assets.map((a) => a.uri), ROOT, name);
+      const stagedImages: string[] = [];
+      for (const [index, asset] of res.assets.entries()) {
+        stagedImages.push(await importInto(TMP, asset.uri, asset.name || `image-${index + 1}.jpg`));
+      }
+      const r = await imagesToPdf(stagedImages, ROOT, name);
       qc.invalidateQueries({ queryKey: ["files"] });
       qc.invalidateQueries({ queryKey: ["pdf"] });
       qc.invalidateQueries({ queryKey: ["home"] });
       setBusy(null);
       toast.show("PDF created", "success");
       router.push({ pathname: "/pdf-viewer", params: { uri: r.uri, name: name + ".pdf" } });
-    } catch {
+    } catch (error: any) {
       setBusy(null);
-      toast.show("Could not create PDF", "error");
+      toast.show(error?.message || "Could not create PDF", "error");
     }
   }, [dialog, qc, router, toast]);
 
@@ -176,8 +180,13 @@ export default function Tools() {
     const res = await DocumentPicker.getDocumentAsync({ type: "image/*", copyToCacheDirectory: true });
     if (res.canceled || !res.assets?.length) return;
     const a = res.assets[0];
-    router.push({ pathname: "/ocr", params: { uri: a.uri, name: a.name || "image" } });
-  }, [router]);
+    try {
+      const stored = await importInto(TMP, a.uri, a.name || "image.jpg");
+      router.push({ pathname: "/ocr", params: { uri: stored, name: a.name || "image" } });
+    } catch (error: any) {
+      toast.show(error?.message || "Could not prepare the image for OCR", "error");
+    }
+  }, [router, toast]);
 
   useEffect(() => {
     if (params.open && !handledParam.current) {

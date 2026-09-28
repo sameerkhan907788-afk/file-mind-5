@@ -16,7 +16,7 @@ import { Icon } from "@/src/icons";
 import { useFileOpener } from "@/src/hooks/use-file-opener";
 import { addVault, listVault, type VaultRow } from "@/src/lib/db";
 import { formatBytes, getKind, kindIcon, kindTint } from "@/src/lib/format";
-import { ensure, joinDir, ROOT, VAULT } from "@/src/lib/fs";
+import { importInto, ROOT, VAULT } from "@/src/lib/fs";
 import { deleteVaultItem, restoreFromVault } from "@/src/lib/vault";
 import { makeStyles, radius, spacing, useTheme } from "@/src/theme";
 import * as FileSystem from "expo-file-system/legacy";
@@ -73,12 +73,10 @@ export default function Vault() {
     if (res.canceled || !res.assets?.length) return;
     setBusy("Securing…");
     try {
-      await ensure(VAULT);
       for (const a of res.assets) {
         const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
         const stored = `${id}__${a.name}`;
-        const vaultPath = joinDir(VAULT, stored);
-        await FileSystem.copyAsync({ from: a.uri, to: vaultPath });
+        const vaultPath = await importInto(VAULT, a.uri, stored);
         const info = await FileSystem.getInfoAsync(vaultPath);
         await addVault({
           id,

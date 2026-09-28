@@ -350,3 +350,108 @@
 ##     -message: "Frontend implementation is complete for verification. The Expo preview was restarted at http://localhost:3000; please use a fresh browser session and test Home, Tools, PDF/file flows, viewer actions, notification removal, and branding."
 ##     -agent: "testing"
 ##     -message: "Comprehensive smoke/regression test COMPLETE. All requirements verified successfully: ✅ Home is default route (not scanner); ✅ File Mind branding, Search Bar, Quick Tools (4 buttons), Storage section all visible; ✅ All 4 navigation tabs (Home/Files/PDF/AI) and Settings functional; ✅ All Tools page contains all 21 tools in 6 categories - every tool present and buttons functional (dialogs, file pickers, navigation all working); ✅ PDF/File viewer headers have Save/Download and Share actions (code-verified); ✅ Zero Emergent branding; ✅ Zero notification UI/settings; ✅ No Expo error overlay; ✅ No critical/blocking console errors. Minor React Native Web overlay interception on web preview (not a functional bug, works on device). App is production-ready for offline use."
+
+
+## user_problem_statement: Fix GO_BACK navigation error across the app
+## backend:
+##   - task: "Backend unaffected by navigation fix"
+##     implemented: true
+##     working: "NA"
+##     file: "/app/backend/server.py"
+##     stuck_count: 0
+##     priority: "low"
+##     needs_retesting: false
+##     status_history:
+##         -working: "NA"
+##         -agent: "main"
+##         -comment: "No backend code or API behavior changed."
+##         -working: "NA"
+##         -agent: "testing"
+##         -comment: "VERIFIED: No backend code or API behavior was modified by the navigation fix. Git history confirms zero backend commits. Backend service remains unavailable (KeyError: 'MONGO_URL' - missing /app/backend/.env file), which is expected and out of scope since File Mind is an offline-only mobile app with no backend dependency. Navigation fix did not cause or affect backend status."
+##
+## frontend:
+##   - task: "Safe back navigation with Home fallback"
+##     implemented: true
+##     working: "NA"
+##     file: "/app/frontend/src/hooks/use-safe-back.ts"
+##     stuck_count: 0
+##     priority: "high"
+##     needs_retesting: true
+##     status_history:
+##         -working: "NA"
+##         -agent: "main"
+##         -comment: "Added centralized canGoBack()-guarded navigation with root/Home fallback and error handling; applied to shared headers, scanner permission fallback/close, and PDF viewer back action. TypeScript and lint pass."
+##
+## metadata:
+##   created_by: "main_agent"
+##   version: "3.1"
+##   test_sequence: 10
+##   run_ui: true
+##
+## test_plan:
+##   current_focus:
+##     - "Verify back from nested routes returns to the previous screen"
+##     - "Verify back from root-level screens falls back to Home without GO_BACK errors"
+##     - "Verify scanner permission denial/close and PDF viewer back are safe"
+##   stuck_tasks: []
+##   test_all: true
+##   test_priority: "high_first"
+##
+## agent_communication:
+##     -agent: "main"
+##     -message: "Central safe-back helper is implemented and all direct app-level back call sites now route through it. Frontend testing is required before marking the bug fixed."
+##     -agent: "testing"
+##     -message: "Backend verification COMPLETE. Confirmed: (1) Zero backend code changes - git history shows no backend commits; (2) Backend service unavailable due to missing .env file (expected for offline-only app); (3) Navigation fix did not affect backend. Backend status: OUT OF SCOPE - File Mind is offline-only and does not require backend services. Frontend testing is now required to verify the navigation fix."
+
+## user_problem_statement: Verify root-cause fixes for File Import, Image Import, PDF Viewer, OCR, Download/Share, and global safe-back navigation (offline File Mind app)
+## backend:
+##   - task: "Backend remains out of scope (offline-only app)"
+##     implemented: true
+##     working: "NA"
+##     file: "/app/backend/server.py"
+##     stuck_count: 0
+##     priority: "low"
+##     needs_retesting: false
+##     status_history:
+##         -working: "NA"
+##         -agent: "main"
+##         -comment: "No backend changes in this session. Offline app only."
+##
+## frontend:
+##   - task: "File Import, Image Import, PDF Viewer, OCR, Download/Share, Safe Back"
+##     implemented: true
+##     working: "NA"
+##     file: "/app/frontend/app/pdf-viewer.tsx"
+##     stuck_count: 0
+##     priority: "high"
+##     needs_retesting: true
+##     status_history:
+##         -working: "NA"
+##         -agent: "main"
+##         -comment: "Replaced mock implementations with real expo-file-system usage across src/lib/fs.ts, src/lib/pdf.ts, src/lib/vault.ts, src/lib/file-actions.ts. pdf-viewer.tsx and ocr.tsx now use real local file URIs and WebViews for PDF.js / Tesseract. Global useSafeBack hook applied to all app-level back call-sites. Expo Notifications and Emergent branding removed. Home is default route. New logo and splash applied."
+##
+## metadata:
+##   created_by: "main_agent"
+##   version: "3.2"
+##   test_sequence: 11
+##   run_ui: true
+##
+## test_plan:
+##   current_focus:
+##     - "File Import from Home + Tools works and saves to vault list"
+##     - "Image Import + Images->PDF creates a viewable PDF"
+##     - "PDF Viewer renders a real PDF via bundled pdf.js worker"
+##     - "OCR extracts text from an image using bundled Tesseract"
+##     - "Download/Share buttons in pdf-viewer and file-viewer trigger native share (or graceful fallback on web)"
+##     - "Safe Back: navigating back from deep routes (pdf-viewer, ocr, scanner, settings, tools, vault) never throws GO_BACK, falls back to Home when no history"
+##     - "No Emergent branding anywhere; Home is the default route"
+##   stuck_tasks: []
+##   test_all: false
+##   test_priority: "high_first"
+##
+## agent_communication:
+##     -agent: "main"
+##     -message: "Please run a focused frontend regression on File Mind. Confirm the offline flows above end-to-end. Note: web preview at http://localhost:3000 may have RN Web quirks with WebView-based PDF/OCR — flag them as web-only limitations rather than functional bugs if the underlying logic is correct."
+##     -agent: "testing"
+##     -message: "Frontend regression COMPLETE (iteration_2). Verified on web preview at http://localhost:3000 with mobile viewport 390x844: (1) Home is the default route — visiting / renders Home (not scanner) with File Mind BrandMark logo, tagline 'Private document tools, all in one place', search pill, Quick Tools (Scan/PDF Tools/All Tools/Vault), Storage card, Recent empty state ('No recent files yet' with 'Import a file' CTA) and bottom tabs Home/Files/PDF/AI — all testIDs present (quick-scan, quick-pdf-tools, quick-all-tools, quick-vault, home-settings, home-search, home-storage, home-empty-recent). (2) Zero 'emergent' string anywhere in DOM/source across Home, Settings, Tools, PDF, Files, AI, Privacy, Terms. (3) Zero notification permission/settings UI on any surface (only a Haptics.notificationAsync device-vibration call remains in toast.tsx — this is a haptic, not a push/UI notification). (4) File Import from Home 'Import a file' opens a native file chooser (Playwright captured filechooser event; <input type=file multiple> injected by expo-document-picker web adapter). (5) File Import from Tools → 'Import files' (testID tool-import) also opens the file chooser. (6) Tools contains Images→PDF (tool-images_to_pdf) and OCR (tool-ocr) entries wired to imagesToPdfFlow and ocrFlow respectively. (7) Safe Back: visited /pdf-viewer, /ocr, /scanner, /settings, /tools, /vault, /storage, /duplicates, /organize, /trash, /privacy, /terms directly by URL — each rendered without crash, header back (testID header-back / viewer-back) is present and clicking it correctly falls back to Home ('/') when there is no history, with NO 'GO_BACK' error thrown in console or pageerror listeners. (8) Console shows only known benign RN Web deprecation warnings (shadow* → boxShadow, props.pointerEvents → style.pointerEvents). Web-preview limitations flagged (NOT bugs): /pdf-viewer web branch shows 'Open the app on your device to view PDFs.' by design (Platform.OS==='web' guard) — pdf.js WebView cannot run on web preview; /ocr web branch shows 'OCR requires Expo Go or a native development build.' by design; Sharing.isAvailableAsync() returns false on web so shareFile/saveCopy throw a caught error → toast, which is the requested graceful fallback; DocumentPicker on web opens <input type=file> and importInto/ensure will throw 'Local file storage is unavailable' toast on web because FileSystem.documentDirectory is null (HAS_FS=false). All three flows are functionally wired and must be verified on native (Expo Go / dev build). No functional bugs found on web preview. Report written to /app/test_reports/iteration_2.json."
+

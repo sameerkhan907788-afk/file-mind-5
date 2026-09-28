@@ -14,11 +14,13 @@ import { Chip } from "@/src/components/ui";
 import { Icon } from "@/src/icons";
 import { getMeta, upsertMeta } from "@/src/lib/db";
 import { baseName, getExt } from "@/src/lib/format";
-import { createFolder, joinDir, listDir, readBase64, ROOT, uniqueName, writeText, TMP } from "@/src/lib/fs";
+import { createFolder, importInto, joinDir, listDir, readBase64, ROOT, TMP, uniqueName, writeText } from "@/src/lib/fs";
 
 const TESS_DIR = `${FileSystem.cacheDirectory}tesseract/`;
 const TESS_CORE_DIR = `${TESS_DIR}core/`;
+const TESS_CORE = `${TESS_CORE_DIR}tesseract-core.wasm.js`;
 const TESS_DATA_DIR = `${TESS_DIR}data/`;
+const OCR_PAGE = `${TESS_DIR}ocr.html`;
 const TESS_ASSETS = [
   { module: require("../assets/tesseract/tesseract.min.js.tessjs"), target: `${TESS_DIR}tesseract.min.js` },
   { module: require("../assets/tesseract/worker.min.js.tessjs"), target: `${TESS_DIR}worker.min.js` },
@@ -41,6 +43,7 @@ async function prepareOcrAssets() {
     const info = await FileSystem.getInfoAsync(item.target);
     if (!info.exists) await FileSystem.copyAsync({ from: source, to: item.target });
   }
+  await FileSystem.writeAsStringAsync(OCR_PAGE, OCR_HTML);
 }
 
 import { makeStyles, radius, spacing, useTheme } from "@/src/theme";
@@ -81,6 +84,7 @@ export default function Ocr() {
   const [error, setError] = useState<string | null>(null);
   const [assetsReady, setAssetsReady] = useState(false);
   const [runKey, setRunKey] = useState(0);
+  const [retryKey, setRetryKey] = useState(0);
 
   useEffect(() => {
     (async () => {
@@ -95,10 +99,10 @@ export default function Ocr() {
         setError("Could not prepare the offline OCR engine");
       }
     })();
-  }, [uri, name]);
+  }, [uri, name, retryKey]);
 
   const injected = useMemo(
-    () => (imgData ? `window.__IMG__=${JSON.stringify(imgData)};window.__LANG__=${JSON.stringify(lang)};window.__WORKER__=${JSON.stringify(`${TESS_DIR}worker.min.js`)};window.__CORE__=${JSON.stringify(TESS_CORE_DIR)};window.__LANGPATH__=${JSON.stringify(TESS_DATA_DIR)};true;` : "true;"),
+    () => (imgData ? `window.__IMG__=${JSON.stringify(imgData)};window.__LANG__=${JSON.stringify(lang)};window.__WORKER__=${JSON.stringify(`${TESS_DIR}worker.min.js`)};window.__CORE__=${JSON.stringify(TESS_CORE)};window.__LANGPATH__=${JSON.stringify(TESS_DATA_DIR)};true;` : "true;"),
     [imgData, lang],
   );
 
@@ -113,7 +117,9 @@ export default function Ocr() {
         setResult(m.text || "");
         setProgress(1);
       } else if (m.type === "error") setError(m.message || "OCR failed");
-    } catch {}
+    } catch {
+      setError("OCR returned an invalid response");
+    }
   };
 
   const rerun = (l: typeof lang) => {
@@ -167,11 +173,31 @@ export default function Ocr() {
         <Chip label="Both" active={lang === "eng+hin"} onPress={() => rerun("eng+hin")} testID="ocr-both" />
       </View>
 
-      {error ? (
+      {Platform.OS === "web" ? (
+        <View style={styles.center}>
+          <Icon name="cellphone" size={40} color={colors.muted} />
+          <Text style={styles.centerText}>OCR requires Expo Go or a native development build.</Text>
+          <Text style={styles.hint}>The browser preview cannot run the bundled native OCR WebView.</Text>
+        </View>
+      ) : error ? (
         <View style={styles.center}>
           <Icon name="alert-circle-outline" size={40} color={colors.error} />
           <Text style={styles.centerText}>{error}</Text>
           <Text style={styles.hint}>OCR runs from the bundled on-device engine. No internet connection is required.</Text>
+          <Pressable
+            testID="ocr-retry"
+            style={styles.retryBtn}
+            onPress={() => {
+              setError(null);
+              setResult(null);
+              setProgress(0);
+              setStatus("Retrying…");
+              setRunKey((key) => key + 1);
+              setRetryKey((key) => key + 1);
+            }}
+          >
+            <Text style={styles.retryText}>Retry OCR</Text>
+          </Pressable>
         </View>
       ) : result === null ? (
         <View style={styles.center}>
@@ -205,20 +231,16 @@ export default function Ocr() {
         <WebView
           key={runKey}
           testID="ocr-webview"
-          source={{ html: OCR_HTML, baseUrl: TESS_DIR }}
+          source={{ uri: OCR_PAGE }}
           injectedJavaScriptBeforeContentLoaded={injected}
           onMessage={onMessage}
+          onError={() => setError("OCR WebView could not load the bundled engine")}
+          onHttpError={() => setError("OCR assets could not be loaded on this device")}
           javaScriptEnabled
           domStorageEnabled
           originWhitelist={["*"]}
           style={styles.hiddenWeb}
         />
-      )}
-      {Platform.OS === "web" && result === null && !error && (
-        <View style={styles.center}>
-          <Icon name="cellphone" size={40} color={colors.muted} />
-          <Text style={styles.centerText}>Run OCR on your device.</Text>
-        </View>
       )}
     </View>
   );
@@ -230,6 +252,8 @@ const useStyles = makeStyles((c) => ({
   center: { flex: 1, alignItems: "center", justifyContent: "center", padding: spacing.xxl, gap: spacing.md },
   centerText: { fontSize: 15, color: c.onSurface, fontWeight: "600", textAlign: "center" },
   hint: { fontSize: 13, color: c.muted, textAlign: "center", lineHeight: 19, maxWidth: 300 },
+  retryBtn: { marginTop: spacing.md, backgroundColor: c.brandPrimary, borderRadius: radius.pill, paddingHorizontal: spacing.xl, paddingVertical: spacing.md },
+  retryText: { color: c.onBrandPrimary, fontWeight: "700", fontSize: 14 },
   progressCircle: { width: 96, height: 96, borderRadius: 48, borderWidth: 5, borderColor: c.brandPrimary, alignItems: "center", justifyContent: "center" },
   progressPct: { fontSize: 22, fontWeight: "800", color: c.brandPrimary },
   resultWrap: { padding: spacing.lg, paddingBottom: 100 },

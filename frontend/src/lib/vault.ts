@@ -1,15 +1,12 @@
 import { addVault, listVault, removeVault, type VaultRow } from "./db";
-import { deleteForever, ensure, joinDir, uniqueName, VAULT } from "./fs";
+import { deleteForever, importInto, VAULT } from "./fs";
 import { getKind } from "./format";
 import type { FileEntry } from "./fs";
-import * as FileSystem from "expo-file-system/legacy";
 
 export async function addToVault(entry: FileEntry): Promise<VaultRow> {
-  await ensure(VAULT);
   const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const stored = `${id}__${entry.name}`;
-  const vaultPath = joinDir(VAULT, stored);
-  await FileSystem.copyAsync({ from: entry.uri, to: vaultPath });
+  const vaultPath = await importInto(VAULT, entry.uri, stored);
   await deleteForever(entry.uri);
   const row: VaultRow = {
     id,
@@ -24,10 +21,7 @@ export async function addToVault(entry: FileEntry): Promise<VaultRow> {
 }
 
 export async function restoreFromVault(row: VaultRow, destDir: string): Promise<string> {
-  await ensure(destDir);
-  const safe = await uniqueName(destDir, row.name);
-  const to = joinDir(destDir, safe);
-  await FileSystem.copyAsync({ from: row.vault_path, to });
+  const to = await importInto(destDir, row.vault_path, row.name);
   await deleteForever(row.vault_path);
   await removeVault(row.id);
   return to;

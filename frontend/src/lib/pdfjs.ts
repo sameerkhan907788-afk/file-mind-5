@@ -34,7 +34,15 @@ const VIEWER_HTML = `<!DOCTYPE html>
   else {
     lib.GlobalWorkerOptions.workerSrc = './pdf.worker.min.js';
     var url = window.__PDF_URL__;
-    lib.getDocument({ url: url }).promise.then(function(doc){
+    var b64 = window.__PDF_BASE64__;
+    function base64ToBytes(value){
+      var raw = atob(value);
+      var bytes = new Uint8Array(raw.length);
+      for(var i=0;i<raw.length;i++) bytes[i]=raw.charCodeAt(i);
+      return bytes;
+    }
+    var loading = b64 ? lib.getDocument({ data: base64ToBytes(b64) }) : lib.getDocument({ url: url });
+    loading.promise.then(function(doc){
       pdfDoc = doc;
       document.getElementById('status').style.display='none';
       post({type:'loaded', pages: doc.numPages});

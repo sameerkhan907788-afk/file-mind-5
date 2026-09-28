@@ -2,14 +2,16 @@ import * as FileSystem from "expo-file-system/legacy";
 
 import { getKind, type FileKind } from "./format";
 
-export const ROOT = FileSystem.documentDirectory + "FileMind/";
-export const TRASH = ROOT + ".trash/";
-export const VAULT = FileSystem.documentDirectory + ".vault/";
-export const TMP = FileSystem.cacheDirectory + "fm-tmp/";
+const DOCUMENT_DIR = FileSystem.documentDirectory ?? "";
+const CACHE_DIR = FileSystem.cacheDirectory ?? "";
 
-// On web there is no sandbox document directory; short-circuit fs ops so the UI
-// renders empty states instead of hanging. Native (Expo Go / device) is unaffected.
-export const HAS_FS = !!FileSystem.documentDirectory;
+export const ROOT = DOCUMENT_DIR ? `${DOCUMENT_DIR}FileMind/` : "";
+export const TRASH = ROOT ? `${ROOT}.trash/` : "";
+export const VAULT = DOCUMENT_DIR ? `${DOCUMENT_DIR}.vault/` : "";
+export const TMP = CACHE_DIR ? `${CACHE_DIR}fm-tmp/` : "";
+
+// Web preview does not provide the native sandbox filesystem. Native (Expo Go / device) does.
+export const HAS_FS = Boolean(DOCUMENT_DIR);
 
 export type FileEntry = {
   name: string;
@@ -21,6 +23,7 @@ export type FileEntry = {
 };
 
 async function ensure(dir: string) {
+  if (!HAS_FS || !dir) throw new Error("Local file storage is unavailable in this environment");
   const info = await FileSystem.getInfoAsync(dir);
   if (!info.exists) {
     await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
@@ -41,8 +44,9 @@ function joinDir(parent: string, name: string) {
 }
 
 export async function listDir(dir: string): Promise<FileEntry[]> {
-  if (!HAS_FS) return [];
+  if (!HAS_FS || !dir) return [];
   await ensureDirs();
+  await ensure(dir);
   const names = await FileSystem.readDirectoryAsync(dir);
   const entries: FileEntry[] = [];
   for (const name of names) {
@@ -87,10 +91,12 @@ export async function statFolderSize(dir: string): Promise<number> {
 }
 
 export async function uniqueName(dir: string, name: string): Promise<string> {
-  const dot = name.lastIndexOf(".");
-  const base = dot > 0 ? name.slice(0, dot) : name;
-  const ext = dot > 0 ? name.slice(dot) : "";
-  let candidate = name;
+  await ensure(dir);
+  const safeName = sanitizeName(name, "untitled");
+  const dot = safeName.lastIndexOf(".");
+  const base = dot > 0 ? safeName.slice(0, dot) : safeName;
+  const ext = dot > 0 ? safeName.slice(dot) : "";
+  let candidate = safeName;
   let i = 1;
   while ((await FileSystem.getInfoAsync(joinDir(dir, candidate))).exists) {
     candidate = `${base} (${i})${ext}`;
@@ -105,6 +111,7 @@ export function sanitizeName(value: string, fallback = "untitled"): string {
 }
 
 export async function createFolder(parent: string, name: string) {
+  await ensure(parent);
   const safe = await uniqueName(parent, sanitizeName(name, "New folder"));
   await FileSystem.makeDirectoryAsync(joinDir(parent, safe), { intermediates: true });
   return joinDir(parent, safe);
@@ -124,12 +131,14 @@ export function parentOf(uri: string): string {
 }
 
 export async function copyEntry(entry: FileEntry, destDir: string) {
+  await ensure(destDir);
   const safe = await uniqueName(destDir, entry.name);
-  await FileSystem.copyAsync({ from: entry.uri, to: joinDir(destDir, safe) });
+  await copyFile(entry.uri, joinDir(destDir, safe));
   return joinDir(destDir, safe);
 }
 
 export async function moveEntry(entry: FileEntry, destDir: string) {
+  await ensure(destDir);
   const safe = await uniqueName(destDir, entry.name);
   await FileSystem.moveAsync({ from: entry.uri, to: joinDir(destDir, safe) });
   return joinDir(destDir, safe);
@@ -206,10 +215,29 @@ export async function getInfo(uri: string) {
   return FileSystem.getInfoAsync(uri);
 }
 
+async function copyFile(srcUri: string, destUri: string) {
+  await ensure(parentOf(destUri));
+  try {
+    await FileSystem.copyAsync({ from: srcUri, to: destUri });
+  } catch (copyError) {
+    try {
+      const b64 = await FileSystem.readAsStringAsync(srcUri, { encoding: FileSystem.EncodingType.Base64 });
+      await FileSystem.writeAsStringAsync(destUri, b64, { encoding: FileSystem.EncodingType.Base64 });
+    } catch {
+      throw copyError;
+    }
+  }
+  const info = await FileSystem.getInfoAsync(destUri);
+  if (!info.exists || info.isDirectory) {
+    throw new Error("The selected file could not be copied into File Mind storage");
+  }
+}
+
 export async function importInto(destDir: string, srcUri: string, name: string) {
-  const safe = await uniqueName(destDir, name);
+  await ensure(destDir);
+  const safe = await uniqueName(destDir, sanitizeName(name, "imported-file"));
   const to = joinDir(destDir, safe);
-  await FileSystem.copyAsync({ from: srcUri, to });
+  await copyFile(srcUri, to);
   return to;
 }
 
